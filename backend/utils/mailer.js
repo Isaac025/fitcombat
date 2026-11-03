@@ -13,7 +13,13 @@ export const getTransporter = () => {
 };
 
 const escapeHtml = (s) =>
-  String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  String(s).replace(
+    /[&<>"']/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[
+        c
+      ],
+  );
 
 export const buildTicketEmail = ({ name, ticketNumber }) => {
   const n = escapeHtml(name);
@@ -32,7 +38,7 @@ export const buildTicketEmail = ({ name, ticketNumber }) => {
      <p style="margin:0;font-size:14px;color:#b5b5b5;line-height:1.6;">Your payment was confirmed. Your ticket is attached to this email as a PDF — save it or screenshot it and show it at the entrance.</p>
    </td></tr>
    <tr><td style="padding:24px 28px;" align="center">
-     <table role="presentation" cellpadding="0" cellspacing="0" style="background:#f9b233;border-radius:12px;width:100%;">
+     <table role="presentation" cellpadding="0" cellspacing="0" style="background:#DDB18C;border-radius:12px;width:100%;">
        <tr><td style="padding:16px;text-align:center;color:#0a0a0a;">
          <div style="font-size:11px;font-weight:700;letter-spacing:3px;">TICKET NUMBER</div>
          <div style="font-size:30px;font-weight:900;letter-spacing:2px;">${ticketNumber}</div>
