@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@getbrevo/brevo": "^6.2.0",
     "bwip-js": "^4.5.0",
     "cors": "^2.8.6",
     "dotenv": "^18.0.9",

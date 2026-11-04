@@ -7,6 +7,10 @@ export const getTransporter = () => {
     transporter = nodemailer.createTransport({
       service: "gmail",
       auth: { user: process.env.EMAIL_USER, pass: process.env.EMAIL_PASS },
+      // Never hang for minutes if the host blocks SMTP (Render free tier does).
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 20_000,
     });
   }
   return transporter;
@@ -78,17 +82,99 @@ ${EVENT.contactEmail} | ${EVENT.contactPhone}`;
   return { html, text };
 };
 
+// ---- Delivery providers -------------------------------------------------
+// Render's free tier blocks SMTP (ports 25/465/587), so on Render use an HTTPS
+// email API (Resend or Brevo). SMTP/Gmail remains as a fallback for local dev.
+
+const fromAddress = () => process.env.EMAIL_FROM || process.env.EMAIL_USER;
+
+const assertOk = async (res, provider) => {
+  if (res.ok) return;
+  const detail = await res.text().catch(() => "");
+  throw new Error(
+    `${provider} responded ${res.status}: ${detail.slice(0, 300)}`,
+  );
+};
+
+const sendViaResend = async ({
+  to,
+  subject,
+  html,
+  text,
+  filename,
+  pdfBuffer,
+}) => {
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: `FIT COMBAT <${fromAddress()}>`,
+      to: [to],
+      subject,
+      html,
+      text,
+      attachments: [{ filename, content: pdfBuffer.toString("base64") }],
+    }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  await assertOk(res, "Resend");
+};
+
+const sendViaBrevo = async ({
+  to,
+  subject,
+  html,
+  text,
+  filename,
+  pdfBuffer,
+}) => {
+  const res = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "api-key": process.env.BREVO_API_KEY,
+      "Content-Type": "application/json",
+      accept: "application/json",
+    },
+    body: JSON.stringify({
+      sender: { name: "FIT COMBAT", email: fromAddress() },
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+      textContent: text,
+      attachment: [{ name: filename, content: pdfBuffer.toString("base64") }],
+    }),
+    signal: AbortSignal.timeout(20_000),
+  });
+  await assertOk(res, "Brevo");
+};
+
 export const sendTicketEmail = async (ticket, pdfBuffer) => {
   const { html, text } = buildTicketEmail(ticket);
-  await getTransporter().sendMail({
-    from: `"FIT COMBAT" <${process.env.EMAIL_USER}>`,
+  const msg = {
     to: ticket.email,
     subject: `Your FIT COMBAT ticket — ${ticket.ticketNumber}`,
+    html,
+    text,
+    filename: `${ticket.ticketNumber}.pdf`,
+    pdfBuffer,
+  };
+
+  if (process.env.RESEND_API_KEY) return sendViaResend(msg);
+  if (process.env.BREVO_API_KEY) return sendViaBrevo(msg);
+
+  // Fallback: SMTP (works locally / on paid hosts, NOT on Render free tier)
+  await getTransporter().sendMail({
+    from: `"FIT COMBAT" <${process.env.EMAIL_USER}>`,
+    to: msg.to,
+    subject: msg.subject,
     text,
     html,
     attachments: [
       {
-        filename: `${ticket.ticketNumber}.pdf`,
+        filename: msg.filename,
         content: pdfBuffer,
         contentType: "application/pdf",
       },
